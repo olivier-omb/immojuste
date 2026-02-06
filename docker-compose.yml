@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: immojuste_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: immojuste
+      POSTGRES_PASSWORD: immojuste_local_pwd
+      POSTGRES_DB: immojuste
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U immojuste -d immojuste"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

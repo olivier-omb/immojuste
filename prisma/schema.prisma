@@ -1,0 +1,449 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  BUYER
+  SELLER
+  AGENT
+  ADMIN
+}
+
+enum FinancingStatus {
+  NOT_STARTED
+  SIMULATED
+  PRE_APPROVED
+  APPROVED
+  CASH
+}
+
+enum Timing {
+  URGENT       // 0-3 mois
+  SHORT_TERM   // 3-6 mois
+  MEDIUM_TERM  // 6-12 mois
+  FLEXIBLE     // 12+ mois
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  STUDIO
+  LOFT
+  VILLA
+  DUPLEX
+  PENTHOUSE
+  OTHER
+}
+
+enum PropertyCondition {
+  NEW
+  EXCELLENT
+  GOOD
+  TO_REFRESH
+  TO_RENOVATE
+}
+
+enum MatchGrade {
+  A // 80-100
+  B // 60-79
+  C // 40-59
+}
+
+enum MatchStatus {
+  PENDING
+  VIEWED
+  UNLOCKED
+  CONFIRMED
+  CONTACTED
+  REJECTED
+  EXPIRED
+}
+
+enum SubscriptionTier {
+  NONE
+  ESSENTIAL
+  PRO
+  PREMIUM
+}
+
+enum PaymentType {
+  SELLER_SINGLE_UNLOCK
+  AGENT_SUBSCRIPTION
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  NEW_MATCH
+  MATCH_UNLOCKED
+  BUYER_CONFIRMED
+  CONTACT_REQUEST
+  PAYMENT_SUCCESS
+  PROFILE_INCOMPLETE
+  SUBSCRIPTION_EXPIRING
+}
+
+// ============================================
+// AUTH (NextAuth + OTP)
+// ============================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model OtpToken {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+}
+
+// ============================================
+// ONBOARDING
+// ============================================
+
+model OnboardingDraft {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      UserRole
+  data      Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// USER
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  phone         String?
+  phoneVerified Boolean   @default(false)
+  firstName     String?
+  lastName      String?
+  image         String?
+  role          UserRole  @default(BUYER)
+
+  // Consentements
+  consentTerms     Boolean @default(false)
+  consentPrivacy   Boolean @default(false)
+  consentMarketing Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  buyerProfile  BuyerProfile?
+  sellerProfile SellerProfile?
+  agentProfile  AgentProfile?
+  payments      Payment[]
+  notifications Notification[]
+}
+
+// ============================================
+// BUYER (Acheteur)
+// ============================================
+
+model BuyerProfile {
+  id        String @id @default(cuid())
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Budget
+  budgetMin   Int
+  budgetMax   Int
+  downPayment Int?
+
+  // Financement
+  financingStatus FinancingStatus @default(NOT_STARTED)
+  financingProof  String?
+  bankName        String?
+  brokerName      String?
+
+  // Timing
+  timing Timing @default(MEDIUM_TERM)
+
+  // Critères
+  propertyTypes PropertyType[]
+  minBedrooms   Int?
+  minBathrooms  Int?
+  minSurface    Int?
+  maxSurface    Int?
+
+  // Must have / Dealbreakers
+  mustHave     String[]
+  dealbreakers String[]
+
+  // Scoring
+  qualificationScore Int      @default(0)
+  badges             String[]
+
+  // Status
+  isActive   Boolean @default(true)
+  isVerified Boolean @default(false)
+  isComplete Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  zones   BuyerZone[]
+  matches Match[]
+}
+
+model BuyerZone {
+  id             String       @id @default(cuid())
+  buyerProfileId String
+  buyerProfile   BuyerProfile @relation(fields: [buyerProfileId], references: [id], onDelete: Cascade)
+  commune        String
+  postalCode     String
+  radius         Int?
+}
+
+// ============================================
+// SELLER (Vendeur)
+// ============================================
+
+model SellerProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Disponibilités & liens
+  visitAvailability String?
+  immwebLink        String?
+
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  properties Property[]
+}
+
+model Property {
+  id              String        @id @default(cuid())
+  sellerProfileId String
+  sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+
+  // Localisation
+  address    String?
+  commune    String
+  postalCode String
+
+  // Caractéristiques
+  propertyType PropertyType
+  bedrooms     Int
+  bathrooms    Int
+  surface      Int
+  floor        Int?
+  totalFloors  Int?
+  yearBuilt    Int?
+  condition    PropertyCondition @default(GOOD)
+
+  // Prix
+  askingPrice     Int
+  priceNegotiable Boolean @default(true)
+
+  // Extras
+  features    String[]
+  constraints String[]
+
+  // Media
+  photos String[]
+
+  // Timing
+  availableFrom DateTime?
+  timing        Timing    @default(MEDIUM_TERM)
+
+  // Préférences
+  acceptsAgents Boolean @default(true)
+
+  // Status
+  isActive   Boolean @default(true)
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  matches Match[]
+}
+
+// ============================================
+// AGENT
+// ============================================
+
+model AgentProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  agencyName String
+  ipiNumber  String
+
+  specialties     PropertyType[]
+  monthlyCapacity Int            @default(10)
+
+  subscriptionTier     SubscriptionTier @default(NONE)
+  stripeSubscriptionId String?
+  subscriptionEndsAt   DateTime?
+
+  leadsThisMonth Int    @default(0)
+  totalLeads     Int    @default(0)
+  conversionRate Float?
+
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  zones         AgentZone[]
+  matchAccesses MatchAccess[]
+}
+
+model AgentZone {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  commune        String
+  postalCode     String
+}
+
+// ============================================
+// MATCHING
+// ============================================
+
+model Match {
+  id String @id @default(cuid())
+
+  buyerProfileId String
+  buyerProfile   BuyerProfile @relation(fields: [buyerProfileId], references: [id])
+
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+
+  compatibilityScore Int
+  compatibilityGrade MatchGrade
+
+  status MatchStatus @default(PENDING)
+
+  sellerUnlocked   Boolean   @default(false)
+  sellerUnlockedAt DateTime?
+
+  buyerConfirmed   Boolean?
+  buyerConfirmedAt DateTime?
+
+  contactInitiated   Boolean   @default(false)
+  contactInitiatedAt DateTime?
+
+  // Lien vers le paiement d'activation
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agentAccesses MatchAccess[]
+
+  @@unique([buyerProfileId, propertyId])
+}
+
+model MatchAccess {
+  id             String       @id @default(cuid())
+  matchId        String
+  match          Match        @relation(fields: [matchId], references: [id])
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id])
+  accessedAt     DateTime     @default(now())
+}
+
+// ============================================
+// PAYMENTS
+// ============================================
+
+model Payment {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  stripePaymentId  String  @unique
+  stripeCustomerId String?
+
+  amount   Int
+  currency String @default("EUR")
+
+  type   PaymentType
+  status PaymentStatus @default(PENDING)
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  match Match?
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}

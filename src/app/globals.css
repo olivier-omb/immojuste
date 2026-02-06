@@ -1,26 +1,216 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* ImmoJuste Brand — Navy 95% + Green 5% */
+  --color-brand-primary: #5AAE85;
+  --color-brand-primary-dark: #4A9E75;
+  --color-brand-primary-light: #6ABE95;
+  --color-brand-secondary: #2B3A5A;
+  --color-brand-secondary-dark: #1E2D4D;
+  --color-brand-secondary-light: #3B4A6A;
+  --color-brand-accent: #5AAE85;
+  --color-brand-dark: #2B3A5A;
+  --color-brand-gray: #6B7280;
+  --color-brand-gray-light: #D1D5DB;
+  --color-brand-background: #F5F6F8;
+  --color-brand-background-warm: #F0F4F2;
+  --color-success: #5AAE85;
+  --color-warning: #F59E0B;
+  --color-error: #DC2626;
+  --color-info: #3B82F6;
+
+  /* Box Shadows */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-card-hover: 0 2px 4px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
+  --shadow-card-elevated: 0 6px 20px rgba(0,0,0,0.15);
+  --shadow-button: 0 2px 8px rgba(90,174,133,0.3);
+  --shadow-button-hover: 0 4px 14px rgba(90,174,133,0.4);
+  --shadow-modal: 0 8px 28px rgba(0,0,0,0.28);
+  --shadow-nav: 0 2px 12px rgba(0,0,0,0.08);
+  --shadow-inner-glow: inset 0 1px 0 0 rgba(255,255,255,0.1);
+
+  /* Border Radius */
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+
+  /* Font Family */
+  --font-sans: "Cereal", "Circular", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif;
+
+  /* Font Sizes */
+  --text-display-xl: 4.5rem;
+  --text-display-xl--line-height: 1.1;
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 1.15;
+  --text-display-md: 2.5rem;
+  --text-display-md--line-height: 1.2;
+  --text-display-sm: 2rem;
+  --text-display-sm--line-height: 1.25;
+
+  /* Easing */
+  --ease-bounce-in: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Animations */
+  --animate-fade-in: fadeIn 0.3s ease-out;
+  --animate-fade-in-up: fadeInUp 0.4s ease-out;
+  --animate-fade-in-down: fadeInDown 0.4s ease-out;
+  --animate-slide-up: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-down: slideDown 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-scale-in: scaleIn 0.2s ease-out;
+  --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-float: float 3s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Custom gradient utilities (no @theme namespace for background-image) */
+@utility bg-gradient-primary {
+  background-image: linear-gradient(to right, #5AAE85, #4A9E75);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@utility bg-gradient-primary-hover {
+  background-image: linear-gradient(to right, #4A9E75, #3A8E65);
+}
+
+@utility bg-gradient-hero {
+  background-image: linear-gradient(135deg, #2B3A5A 0%, #1E2D4D 50%, #162040 100%);
+}
+
+@utility bg-gradient-warm {
+  background-image: linear-gradient(180deg, #F0F4F2 0%, #FFFFFF 100%);
+}
+
+@utility bg-gradient-card {
+  background-image: linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%);
+}
+
+@utility bg-gradient-dark {
+  background-image: linear-gradient(180deg, #2B3A5A 0%, #1E2D4D 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Cereal", "Circular", -apple-system, BlinkMacSystemFont, "Roboto",
+    "Helvetica Neue", sans-serif;
+  color: var(--color-brand-dark);
+  background-color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-brand-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand-gray-light);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-gray);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-brand-primary);
+  color: white;
+}
+
+/* Focus visible */
+:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Smooth transitions for theme */
+* {
+  transition-property: background-color, border-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Remove transition for elements that shouldn't animate */
+button,
+a,
+input,
+select,
+textarea {
+  transition-property: all;
+}
+
+/* Keyframes for animations */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDown {
+  0% { opacity: 0; transform: translateY(-16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(24px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  0% { opacity: 0; transform: translateY(-24px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Glass effect for modern UI */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(to right, var(--color-brand-dark), var(--color-brand-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
