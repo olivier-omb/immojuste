@@ -84,6 +84,48 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
+        if (user.isDisabled) {
+          throw new Error("Compte désactivé");
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+          role: user.role,
+        };
+      },
+    }),
+    CredentialsProvider({
+      id: "admin-password",
+      name: "Admin Password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Mot de passe", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("Email et mot de passe requis");
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+
+        if (!user || user.role !== "ADMIN" || !user.password) {
+          throw new Error("Identifiants invalides");
+        }
+
+        if (user.isDisabled) {
+          throw new Error("Compte désactivé");
+        }
+
+        const bcrypt = await import("bcryptjs");
+        const isValid = await bcrypt.compare(credentials.password, user.password);
+        if (!isValid) {
+          throw new Error("Identifiants invalides");
+        }
+
         return {
           id: user.id,
           email: user.email,

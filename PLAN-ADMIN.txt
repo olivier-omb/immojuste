@@ -1,0 +1,291 @@
+# Plan : Admin Panel + Profils utilisateurs complets
+
+## Contexte
+
+ImmoJuste est fonctionnel (phases 0-6 terminées) mais il manque :
+1. **Aucun panneau admin** — le rôle ADMIN existe dans le schema Prisma mais n'a ni UI, ni routes, ni API
+2. **Profil vendeur incomplet** — le vendeur ne peut modifier que son bien (property), pas ses infos personnelles (téléphone, disponibilités)
+3. **Pas de protection serveur** — l'auth est vérifiée uniquement côté client via `useSession()`
+4. **Pas de mot de passe** — l'auth est 100% OTP, mais l'admin a besoin d'un login email+mot de passe
+
+L'objectif est d'ajouter un panneau d'administration complet, intelligent et intuitif, accessible sur `/admin`, avec analytics, gestion des utilisateurs, et système d'invitation d'admins par email. En parallèle, corriger les lacunes de profil utilisateur.
+
+---
+
+## Nouvelle branche
+
+```
+git checkout -b feature/admin-panel
+```
+
+---
+
+## Phase A — Schema, dépendances, auth admin (fondation)
+
+### A1. Installer bcryptjs
+```bash
+npm install bcryptjs @types/bcryptjs
+```
+
+### A2. Modifier `prisma/schema.prisma`
+
+Ajouter au modèle `User` :
+```prisma
+password      String?    // Hash bcrypt (admin uniquement)
+isDisabled    Boolean    @default(false)
+```
+
+Ajouter relation : `adminInvitations AdminInvitation[] @relation("AdminInvitations")`
+Ajouter relation : `activityLogs ActivityLog[]`
+
+Nouveau modèle `AdminInvitation` :
+```prisma
+model AdminInvitation {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  token     String    @unique
+  invitedBy String
+  inviter   User      @relation("AdminInvitations", fields: [invitedBy], references: [id])
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+```
+
+Nouveau modèle `ActivityLog` :
+```prisma
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // "user.created", "match.unlocked", "payment.completed"
+  entity    String?  // "User", "Match", "Payment"
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([action])
+  @@index([createdAt])
+}
+```
+
+Appliquer : `npx prisma db push`
+
+### A3. Ajouter CredentialsProvider admin dans `src/lib/auth.ts`
+
+Nouveau provider `id: "admin-password"` à côté du provider "otp" existant :
+- Reçoit email + password
+- Vérifie : user existe, role === ADMIN, password hashé valide (bcrypt.compare)
+- Vérifie : isDisabled === false
+- Retourne { id, email, name, role }
+- Les callbacks JWT/session existants propagent déjà `role` et `id`
+
+### A4. Créer `src/middleware.ts` (protection serveur)
+
+| Route | Règle |
+|---|---|
+| `/admin/login`, `/admin/register` | Accès libre (redirect vers /admin/dashboard si déjà admin) |
+| `/admin/*` | Requiert JWT avec role=ADMIN, sinon redirect → /admin/login |
+| `/dashboard/*` | Requiert JWT authentifié, sinon redirect → / |
+| `/api/admin/*` | Requiert JWT avec role=ADMIN, sinon 403 |
+
+---
+
+## Phase B — API admin (backend complet)
+
+### B1. Helper `src/lib/admin.ts`
+- `requireAdmin()` : vérifie session + role ADMIN
+- `logActivity(action, entity?, entityId?, userId?, metadata?)` : insert dans ActivityLog
+
+### B2. Routes API admin
+
+| Route | Méthode | Description |
+|---|---|---|
+| `/api/admin/stats` | GET | KPIs : users par rôle, matches par grade, revenue totale + ce mois, propriétés actives, taux de conversion |
+| `/api/admin/users` | GET | Liste paginée + filtres (role, search, sort). Include profiles, _count payments/matches |
+| `/api/admin/users/[id]` | GET | Détail complet : user + profil + matches + payments + notifications |
+| `/api/admin/users/[id]` | PUT | Modifier user (nom, téléphone, rôle, isDisabled). Log activity |
+| `/api/admin/matches` | GET | Liste paginée + filtres (grade, status). Include buyer, property, payment |
+| `/api/admin/payments` | GET | Liste paginée + filtres (type, status, dates). + stats résumées (revenue total, par type, par mois) |
+| `/api/admin/invite` | POST | Envoie invitation admin par email. Crée AdminInvitation (token unique, 7j TTL). Envoie email via Resend |
+| `/api/admin/register` | POST | Inscription admin depuis invitation. Valide token, hash password, crée User ADMIN, marque invitation used |
+| `/api/admin/activity` | GET | Activité récente paginée. Include user name |
+
+### B3. Template email admin dans `src/lib/email.ts`
+- `sendAdminInviteEmail({ recipientEmail, inviterName, token })` : lien vers `/admin/register?token=...`
+- Header navy (#2B3A5A) au lieu de bleu pour distinguer les emails admin
+
+---
+
+## Phase C — Interface admin (frontend complet)
+
+### Structure des fichiers
+
+```
+src/app/admin/
+  login/page.tsx              ← Login standalone (email + password)
+  register/page.tsx           ← Inscription via invitation (token dans URL)
+  (panel)/
+    layout.tsx                ← Sidebar admin (navy, logo, nav, logout)
+    page.tsx                  ← Redirect → /admin/dashboard
+    dashboard/page.tsx        ← Analytics + KPIs + activité récente
+    users/
+      page.tsx                ← Table utilisateurs (search, filtres rôle, pagination)
+      [id]/page.tsx           ← Détail utilisateur (profil, matches, paiements, actions)
+    matches/page.tsx          ← Vue d'ensemble des matches (filtres grade/status)
+    payments/page.tsx         ← Dashboard revenus (stats + table paiements)
+    settings/page.tsx         ← Gestion invitations admin (formulaire + liste)
+```
+
+### C1. `/admin/login` — Login admin
+- Formulaire email + mot de passe (composants Input + Button existants)
+- `signIn("admin-password", { email, password, redirect: false })`
+- Fond navy avec carte blanche centrée, logo en haut
+- Messages d'erreur en français
+
+### C2. `/admin/register` — Inscription admin (invitation)
+- Vérifie `?token=` query param via API
+- Formulaire : prénom, nom, mot de passe, confirmation
+- Hash bcrypt, crée User ADMIN, auto-login
+
+### C3. Layout admin `(panel)/layout.tsx`
+- Sidebar fixe navy (#2B3A5A) avec texte blanc
+- Navigation : Dashboard, Utilisateurs, Matches, Paiements, Paramètres
+- Icônes lucide : LayoutDashboard, Users, Link2, CreditCard, Settings
+- Logo ImmoJuste en haut, nom admin + logout en bas
+- Mobile responsive (hamburger)
+- Route group `(panel)` pour exclure login/register du layout
+
+### C4. Dashboard admin
+- **4 StatCards** : Total utilisateurs, Matches actifs, Revenue totale (€), Espaces activés
+- **Graphiques CSS** (pas de lib externe) : barres revenue par mois (6 derniers mois), répartition users par rôle
+- **Table activité récente** : 10 dernières actions (date, user, action, entité)
+- **Actions rapides** : boutons "Inviter un admin", "Voir utilisateurs", "Exporter"
+
+### C5. Gestion utilisateurs
+- **Liste** : SearchInput + tabs rôle (Tous/Acheteurs/Vendeurs/Agents/Admins) + table paginée
+- **Colonnes** : Email, Nom, Rôle (Badge), Inscrit le, Statut (actif/désactivé), Actions
+- **Détail** : cards par section (infos perso, profil spécifique au rôle, matches, paiements)
+- **Actions** : désactiver/réactiver, voir profil complet
+
+### C6. Matches admin
+- Table filtrable (grade A/B/C, statut PENDING/UNLOCKED/etc.)
+- Colonnes : Acheteur, Bien (commune), Score, Grade, Statut, Débloqué, Date
+
+### C7. Paiements admin
+- **Stats en haut** : Revenue totale, ce mois, nb paiements, panier moyen
+- **Table** : Date, Utilisateur, Type (Badge), Montant, Statut, Stripe ID
+- Filtres par type et statut
+
+### C8. Paramètres (invitations)
+- Formulaire invitation : email + bouton "Inviter"
+- Liste invitations en cours : email, invité par, date, expiration, statut
+- Liste admins actuels avec option désactiver
+
+---
+
+## Phase D — Profils utilisateurs (corrections)
+
+### D1. Ajouter PUT à `/api/sellers/profile`
+- Schema Zod : phone, visitAvailability, immwebLink, consents
+- Update User (phone, consents) + SellerProfile (visitAvailability, immwebLink)
+
+### D2. Créer `/dashboard/seller/profile/page.tsx`
+- Formulaire : téléphone, disponibilités visites, lien Immoweb, consentements
+- Même pattern que le profil agent existant
+
+### D3. Mettre à jour navigation vendeur dans `dashboard/layout.tsx`
+- Ajouter "Mon profil" → `/dashboard/seller/profile` entre "Dashboard" et "Mon bien"
+
+### D4. Indicateurs de complétion sur les dashboards vendeur
+- Barre de progression sur `/dashboard/seller/page.tsx`
+- Calcul : téléphone (+25%), bien publié (+25%), disponibilités (+25%), consentements (+25%)
+- CTA "Complétez votre profil" si < 100%
+
+---
+
+## Phase E — Seed admin + finalisation
+
+### E1. Script `prisma/seed-admin.ts`
+- Hash "123456" avec bcryptjs (10 rounds)
+- Upsert User : email `justepupu@yahoo.com`, role ADMIN, firstName "Admin", lastName "ImmoJuste"
+- Exécuter via `npx tsx prisma/seed-admin.ts`
+
+### E2. Intégrer activity logging
+- Ajouter `logActivity()` dans les webhooks Stripe (payment.completed, match.unlocked)
+- Ajouter dans les API profils (profile.updated)
+- Ajouter dans les API properties (property.created)
+
+### E3. Commit & push
+```bash
+git add -A && git commit -m "feat: admin panel, seller profile, middleware"
+git push origin feature/admin-panel
+```
+
+---
+
+## Résumé des fichiers
+
+### Nouveaux fichiers (23)
+| # | Fichier |
+|---|---|
+| 1 | `src/middleware.ts` |
+| 2 | `src/lib/admin.ts` |
+| 3 | `src/app/admin/login/page.tsx` |
+| 4 | `src/app/admin/register/page.tsx` |
+| 5 | `src/app/api/admin/register/route.ts` |
+| 6 | `src/app/api/admin/stats/route.ts` |
+| 7 | `src/app/api/admin/users/route.ts` |
+| 8 | `src/app/api/admin/users/[id]/route.ts` |
+| 9 | `src/app/api/admin/matches/route.ts` |
+| 10 | `src/app/api/admin/payments/route.ts` |
+| 11 | `src/app/api/admin/invite/route.ts` |
+| 12 | `src/app/api/admin/activity/route.ts` |
+| 13 | `src/app/admin/(panel)/layout.tsx` |
+| 14 | `src/app/admin/(panel)/page.tsx` |
+| 15 | `src/app/admin/(panel)/dashboard/page.tsx` |
+| 16 | `src/app/admin/(panel)/users/page.tsx` |
+| 17 | `src/app/admin/(panel)/users/[id]/page.tsx` |
+| 18 | `src/app/admin/(panel)/matches/page.tsx` |
+| 19 | `src/app/admin/(panel)/payments/page.tsx` |
+| 20 | `src/app/admin/(panel)/settings/page.tsx` |
+| 21 | `src/app/dashboard/seller/profile/page.tsx` |
+| 22 | `prisma/seed-admin.ts` |
+| 23 | _(réserve pour tests/ajustements)_ |
+
+### Fichiers modifiés (6)
+| # | Fichier | Changement |
+|---|---|---|
+| 1 | `prisma/schema.prisma` | +password, +isDisabled, +AdminInvitation, +ActivityLog |
+| 2 | `src/lib/auth.ts` | +CredentialsProvider "admin-password" |
+| 3 | `src/lib/email.ts` | +sendAdminInviteEmail() |
+| 4 | `src/app/api/sellers/profile/route.ts` | +PUT handler |
+| 5 | `src/app/dashboard/layout.tsx` | +navigation "Mon profil" pour vendeur |
+| 6 | `src/app/dashboard/seller/page.tsx` | +indicateur complétion profil |
+
+### Dépendance npm ajoutée
+- `bcryptjs` + `@types/bcryptjs`
+
+---
+
+## Améliorations bonus incluses
+
+1. **Middleware serveur** — Protection des routes côté serveur (pas seulement client)
+2. **Activity logging** — Traçabilité des actions pour l'admin dashboard
+3. **Soft delete** — Les utilisateurs sont désactivés, pas supprimés (intégrité des données)
+4. **Graphiques CSS natifs** — Pas de dépendance chart.js/recharts (barres simples en CSS)
+5. **Route groups Next.js** — `(panel)` pour séparer layout admin du login/register
+6. **Profil vendeur complet** — Le vendeur peut enfin modifier ses infos personnelles
+7. **Indicateurs de complétion** — Le vendeur voit clairement ce qui manque à son profil
+
+---
+
+## Vérification
+
+1. `npx prisma db push` — schema appliqué sans erreur
+2. `npm run build` — compilation TypeScript OK
+3. Accéder à `/admin/login` → login avec justepupu@yahoo.com / 123456 → dashboard admin
+4. Naviguer dans Users, Matches, Payments, Settings
+5. Inviter un admin via email, vérifier que l'invitation arrive
+6. Se connecter en vendeur → voir "Mon profil" dans la nav → modifier téléphone
+7. Vérifier que `/dashboard` redirige vers `/` si non connecté (middleware)
+8. Vérifier que `/admin/dashboard` redirige vers `/admin/login` si non admin

@@ -35,6 +35,10 @@ interface SellerProfile {
   id: string;
   unlockedMatchesCount: number;
   properties: Property[];
+  visitAvailability: string | null;
+  phone: string | null;
+  consentTerms: boolean;
+  consentPrivacy: boolean;
 }
 
 interface Match {
@@ -147,6 +151,15 @@ export default function SellerDashboard() {
 
   const recentMatches = matches.slice(0, 3);
 
+  // Profile completion
+  const completionSteps = [
+    { label: "Téléphone", done: !!profile?.phone },
+    { label: "Bien publié", done: hasProperty },
+    { label: "Disponibilités", done: !!profile?.visitAvailability },
+    { label: "Consentements", done: !!(profile?.consentTerms && profile?.consentPrivacy) },
+  ];
+  const completionScore = Math.round((completionSteps.filter((s) => s.done).length / completionSteps.length) * 100);
+
   return (
     <div className="space-y-8">
       {/* Welcome */}
@@ -168,6 +181,33 @@ export default function SellerDashboard() {
           </Link>
         )}
       </div>
+
+      {/* Profile completion */}
+      {completionScore < 100 && (
+        <Card className="border-l-4 border-l-brand-primary">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-brand-dark">Complétion du profil</p>
+              <span className="text-sm font-bold text-brand-primary">{completionScore}%</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full bg-brand-primary rounded-full transition-all"
+                style={{ width: `${completionScore}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {completionSteps.filter((s) => !s.done).map((step) => (
+                <Link key={step.label} href="/dashboard/seller/profile">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs cursor-pointer hover:bg-amber-100">
+                    {step.label}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

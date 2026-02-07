@@ -169,12 +169,14 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   emailVerified DateTime?
+  password      String?   // Hash bcrypt (admin uniquement)
   phone         String?
   phoneVerified Boolean   @default(false)
   firstName     String?
   lastName      String?
   image         String?
   role          UserRole  @default(BUYER)
+  isDisabled    Boolean   @default(false)
 
   // Consentements
   consentTerms     Boolean @default(false)
@@ -184,13 +186,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts      Account[]
-  sessions      Session[]
-  buyerProfile  BuyerProfile?
-  sellerProfile SellerProfile?
-  agentProfile  AgentProfile?
-  payments      Payment[]
-  notifications Notification[]
+  accounts         Account[]
+  sessions         Session[]
+  buyerProfile     BuyerProfile?
+  sellerProfile    SellerProfile?
+  agentProfile     AgentProfile?
+  payments         Payment[]
+  notifications    Notification[]
+  adminInvitations AdminInvitation[] @relation("AdminInvitations")
+  activityLogs     ActivityLog[]
 }
 
 // ============================================
@@ -446,4 +450,33 @@ model Notification {
   data      Json?
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
+}
+
+// ============================================
+// ADMIN
+// ============================================
+
+model AdminInvitation {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  token     String    @unique
+  invitedBy String
+  inviter   User      @relation("AdminInvitations", fields: [invitedBy], references: [id])
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
 }

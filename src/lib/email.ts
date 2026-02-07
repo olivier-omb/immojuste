@@ -356,3 +356,65 @@ export async function sendPaymentConfirmationEmail({
     return { success: false, error };
   }
 }
+
+// Template: Admin invitation email
+export async function sendAdminInviteEmail({
+  recipientEmail,
+  inviterName,
+  token,
+}: {
+  recipientEmail: string;
+  inviterName: string;
+  token: string;
+}) {
+  const registerUrl = `${APP_URL}/admin/register?token=${token}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden;">
+        <div style="background-color: #2B3A5A; padding: 30px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 24px;">ImmoJuste — Administration</h1>
+        </div>
+        <div style="padding: 30px;">
+          <h2 style="color: #1a1a1a; margin-top: 0;">Invitation administrateur</h2>
+          <p style="color: #666666; line-height: 1.6;"><strong>${inviterName}</strong> vous invite à rejoindre l'équipe d'administration d'ImmoJuste.</p>
+          <p style="color: #666666; line-height: 1.6;">Cliquez sur le bouton ci-dessous pour créer votre compte administrateur.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${registerUrl}" style="display: inline-block; background-color: #5AAE85; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">Créer mon compte admin</a>
+          </div>
+          <p style="color: #999999; font-size: 14px;">Cette invitation expire dans <strong>7 jours</strong>.</p>
+          <p style="color: #999999; font-size: 14px;">Si vous n'avez pas demandé cette invitation, ignorez cet email.</p>
+        </div>
+        <div style="background-color: #f5f5f5; padding: 20px; text-align: center;">
+          <p style="color: #999999; font-size: 12px; margin: 0;">ImmoJuste — Plateforme technologique de matching immobilier</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: recipientEmail,
+      subject: "Invitation administrateur — ImmoJuste",
+      html,
+    });
+
+    if (error) {
+      console.error("Failed to send admin invite email:", error);
+      return { success: false, error };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error sending admin invite email:", error);
+    return { success: false, error };
+  }
+}

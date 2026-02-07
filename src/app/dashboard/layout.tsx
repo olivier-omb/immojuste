@@ -29,6 +29,7 @@ const navigation = {
   ],
   SELLER: [
     { name: "Dashboard", href: "/dashboard/seller", icon: LayoutDashboard },
+    { name: "Mon profil", href: "/dashboard/seller/profile", icon: User },
     { name: "Mon bien", href: "/dashboard/seller/property", icon: Home },
     { name: "Acheteurs", href: "/dashboard/seller/matches", icon: Users },
     { name: "Notifications", href: "/dashboard/seller/notifications", icon: Bell },
